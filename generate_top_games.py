@@ -179,39 +179,42 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
 
         # Write out the raw data to this point
         current_time_str = str(datetime.datetime.now())
-        log_file = open('member_data_' + filename_tag + '.log', 'w')
-        log_dict = dict()
-        log_dict[SUMMARY] = { GUILD_MEMBER_COUNT: guild_size,
+        rating_data = dict()
+        rating_data[SUMMARY] = { GUILD_MEMBER_COUNT: guild_size,
                               FAILED_RETRIEVALS: len(failed_users),
                               TOTAL_GAMES: len(guild_ratings),
                               TIME: current_time_str
                             }
-        log_dict[MEMBERS] = members
-        log_dict[FAILED_USERS] = failed_users
-        log_dict[SORTED_GAMES] = top_games
-        json.dump(log_dict, log_file)
+        rating_data[MEMBERS] = members
+        rating_data[FAILED_USERS] = failed_users
+        rating_data[SORTED_GAMES] = top_games
+        with open('member_data_' + filename_tag + '.json', 'w') as raw_data_file:
+            json.dump(log_dict, raw_data_file)
 
     elif raw_data is not None:
         rating_data = json.load(open(raw_data, 'r'))
-        top_games = rating_data[SORTED_GAMES]
-        member_count = rating_data[SUMMARY][GUILD_MEMBER_COUNT]
 
-        if prune is None:
-            top_games = filter(lambda x: x[1] >= 0.1 * member_count, top_games)
-            top_games.sort(key=lambda x: x[2], reverse=True)
-            for game in top_games:
-                print game[0], game[1], game[2], game[3]
-        else:
-            pruned_games = list()
-            with open(prune, 'r') as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    gameid = int(row[0])
-                    matches = [x for x in top_games if x[0] == gameid]
-                    pruned_games.extend(matches)
-            pruned_games.sort(key=lambda x: x[2], reverse=True)
-            for game in pruned_games:
-                print game[0], game[1], game[2], game[3]
+    # Either path we now have rating_data
+    top_games = rating_data[SORTED_GAMES]
+    member_count = rating_data[SUMMARY][GUILD_MEMBER_COUNT]
+
+    # If we want to prune the games
+    if prune is not None:
+        pruned_games = list()
+        with open(prune, 'r') as f:
+            reader = csv.reader(f)
+            for row in reader:
+                gameid = int(row[0])
+                matches = [x for x in top_games if x[0] == gameid]
+                assert len(matches) == 1
+                pruned_games.extend(matches)
+        top_games = pruned_games
+    else:
+        top_games = filter(lambda x: x[1] >= 0.1 * member_count, top_games)
+
+    top_games.sort(key=lambda x: x[2], reverse=True)
+    for game in top_games:
+        print game[0], game[1], game[2], game[3]
 
     print 'Finished'
 
@@ -222,6 +225,7 @@ if __name__ == '__main__':
     parser.add_argument('--users', help='use provided list of users instead of pulling a new one')
     parser.add_argument('--raw', help='provide a .log file to regenerate the final data')
     parser.add_argument('--prune', help='Prune raw data to a specific list of games')
+    parser.add_argument('--n', type=int, help='Give the top n games')
     parser.add_argument('-r', action='store_true', help='Generate pastable report. Does nothing right now')
     args = parser.parse_args()
 
