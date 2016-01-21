@@ -6,7 +6,6 @@
 # TODO: Refactor user retries
 # TODO: Implement pastable report
 # TODO: Remove dependency on boardgamegeek module to make better queries
-# TODO; Hash only with gameid
 #
 # Steven Canning
 # January 2016
@@ -63,7 +62,7 @@ def get_user_ratings(username, bgg=None):
     user_ratings = dict()
     for item in collection:
         if item.rating:
-            user_ratings[(item.id, item.name)] = item.rating
+            user_ratings[item.id] = item.rating
 
     return user_ratings
 
@@ -173,7 +172,7 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
             num_ratings = len(ratings)
             avg_rating = round(mean(ratings), 3)
             sd_ratings = round(stdev(ratings), 3)
-            top_games.append((game_id[0], game_id[1], num_ratings, avg_rating, sd_ratings))
+            top_games.append((game_id, num_ratings, avg_rating, sd_ratings))
 
         # Sort the list
         top_games.sort(key=lambda x: x[2], reverse=True)
@@ -198,10 +197,10 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
         member_count = rating_data[SUMMARY][GUILD_MEMBER_COUNT]
 
         if prune is None:
-            top_games = filter(lambda x: x[2] >= 0.1 * member_count, top_games)
-            top_games.sort(key=lambda x: x[4], reverse=True)
+            top_games = filter(lambda x: x[1] >= 0.1 * member_count, top_games)
+            top_games.sort(key=lambda x: x[2], reverse=True)
             for game in top_games:
-                print game[0], game[1], game[2], game[3], game[4]
+                print game[0], game[1], game[2], game[3]
         else:
             pruned_games = list()
             with open(prune, 'r') as f:
@@ -210,9 +209,9 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
                     gameid = int(row[0])
                     matches = [x for x in top_games if x[0] == gameid]
                     pruned_games.extend(matches)
-            pruned_games.sort(key=lambda x: x[3], reverse=True)
+            pruned_games.sort(key=lambda x: x[2], reverse=True)
             for game in pruned_games:
-                print game[0], game[1], game[2], game[3], game[4]
+                print game[0], game[1], game[2], game[3]
 
     print 'Finished'
 
