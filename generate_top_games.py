@@ -6,6 +6,7 @@
 # TODO: Refactor user retries
 # TODO: Implement pastable report
 # TODO: Remove dependency on boardgamegeek module to make better queries
+# TODO; Hash only with gameid
 #
 # Steven Canning
 # January 2016
@@ -14,6 +15,7 @@ from boardgamegeek import BoardGameGeek
 from boardgamegeek.exceptions import BoardGameGeekAPIRetryError
 
 import json
+import csv
 import math
 import datetime
 
@@ -143,7 +145,7 @@ def get_all_ratings(members, bgg=None):
 
     return guild_ratings, failed_users
 
-def main(users=None, raw_data=None, generate_report=False):
+def main(users=None, raw_data=None, generate_report=False, prune=None):
     bgg = BoardGameGeek()
 
     # if not users and not raw_data: get users, get user ratings, process ratings
@@ -194,11 +196,23 @@ def main(users=None, raw_data=None, generate_report=False):
         rating_data = json.load(open(raw_data, 'r'))
         top_games = rating_data[SORTED_GAMES]
         member_count = rating_data[SUMMARY][GUILD_MEMBER_COUNT]
-        top_games = filter(lambda x: x[2] >= 0.1 * member_count, top_games)
-        top_games.sort(key=lambda x: x[4], reverse=True)
-        #of = open('summary.json', 'w')
-        for game in top_games:
-            print game[0], game[1], game[2], game[3], game[4]
+
+        if prune is None:
+            top_games = filter(lambda x: x[2] >= 0.1 * member_count, top_games)
+            top_games.sort(key=lambda x: x[4], reverse=True)
+            for game in top_games:
+                print game[0], game[1], game[2], game[3], game[4]
+        else:
+            pruned_games = list()
+            with open(prune, 'r') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    gameid = int(row[0])
+                    matches = [x for x in top_games if x[0] == gameid]
+                    pruned_games.extend(matches)
+            pruned_games.sort(key=lambda x: x[3], reverse=True)
+            for game in pruned_games:
+                print game[0], game[1], game[2], game[3], game[4]
 
     print 'Finished'
 
@@ -208,7 +222,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--users', help='use provided list of users instead of pulling a new one')
     parser.add_argument('--raw', help='provide a .log file to regenerate the final data')
+    parser.add_argument('--prune', help='Prune raw data to a specific list of games')
     parser.add_argument('-r', action='store_true', help='Generate pastable report. Does nothing right now')
     args = parser.parse_args()
 
-    main(users=args.users, raw_data=args.raw, generate_report=args.r)
+    main(users=args.users, raw_data=args.raw, generate_report=args.r, prune=args.prune)
