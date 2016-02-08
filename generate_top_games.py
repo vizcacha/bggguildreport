@@ -53,7 +53,7 @@ def get_guild_user_list(guild_id, bgg=None):
     return guild.members
 
 def get_user_ratings(username, bgg=None):
-    """Returns a dict: (gameid, gamename) -> rating"""
+    """Returns a dict: gameid -> rating"""
     if bgg is None:
         bgg = BoardGameGeek()
 
@@ -155,6 +155,7 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
     filename_tag = '_'.join(now_str[:10].split())
 
     if raw_data is None:
+        # load members from file or query for current list
         if users is None:
             members = get_guild_user_list(HEAVY_CARDBOARD, bgg=bgg)
             of = open('members_' + filename_tag + '.txt', 'w')
@@ -162,9 +163,11 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
                 of.write(member + '\n')
         else:
             members = load_members_from_file(users)
+
         guild_size = len(members)
         print 'Members list loaded: %d guild members' % guild_size
         guild_ratings, failed_users = get_all_ratings(members, bgg=bgg)
+
         print 'Processing results...'
         print '%d games rated' % len(guild_ratings)
         top_games = list()
@@ -189,7 +192,7 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
         rating_data[FAILED_USERS] = failed_users
         rating_data[SORTED_GAMES] = top_games
         with open('member_data_' + filename_tag + '.json', 'w') as raw_data_file:
-            json.dump(log_dict, raw_data_file)
+            json.dump(rating_data, raw_data_file)
 
     elif raw_data is not None:
         rating_data = json.load(open(raw_data, 'r'))
@@ -206,15 +209,78 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
             for row in reader:
                 gameid = int(row[0])
                 matches = [x for x in top_games if x[0] == gameid]
-                assert len(matches) == 1
-                pruned_games.extend(matches)
-        top_games = pruned_games
+                if len(matches) == 1:
+                    match = matches[0]
+                    matched_game = (row[1], match[0], match[1], match[2], match[3])
+                elif len(matches) == 0:
+                    matched_game = (row[1], gameid, 0, 0, 0)
+                else:
+                    print 'ERROR'
+                    return
+                pruned_games.append(matched_game)
+        pruned_games.sort(key=lambda x: x[3], reverse=True)
+        for idx, game in enumerate(pruned_games):
+            label = str(idx + 1) + '.'
+            print label, game[0], game[2], game[3], game[4]
+        return
     else:
         top_games = filter(lambda x: x[1] >= 0.1 * member_count, top_games)
 
+    # Get the top 50
+    top50 = list()
     top_games.sort(key=lambda x: x[2], reverse=True)
+    count_of_printed = 0
     for game in top_games:
-        print game[0], game[1], game[2], game[3]
+        game_info = get_game_info(game[0], bgg)
+        if not game_info.expansion:
+            count_of_printed += 1
+            top50.append((game_info.name, game[0], game[1], game[2], game[3]))
+        if count_of_printed > 49:
+            break
+
+    # Get the bottom 10
+    bottom10 = list()
+    top_games.sort(key=lambda x: x[2])
+    count_of_printed = 0
+    for game in top_games:
+        game_info = get_game_info(game[0], bgg)
+        if not game_info.expansion:
+            count_of_printed += 1
+            bottom10.append((game_info.name, game[0], game[1], game[2], game[3]))
+        if count_of_printed > 9:
+            break
+
+    # Get the most variable
+    variable10 = list()
+    top_games.sort(key=lambda x: x[3], reverse=True)
+    count_of_printed = 0
+    for game in top_games:
+        game_info = get_game_info(game[0], bgg)
+        if not game_info.expansion:
+            count_of_printed += 1
+            variable10.append((game_info.name, game[0], game[1], game[2], game[3]))
+        if count_of_printed > 9:
+            break
+
+    # Get the most rated
+    most10 = list()
+    top_games.sort(key=lambda x: x[1], reverse=True)
+    count_of_printed = 0
+    for game in top_games:
+        game_info = get_game_info(game[0], bgg)
+        if not game_info.expansion:
+            count_of_printed += 1
+            most10.append((game_info.name, game[0], game[1], game[2], game[3]))
+        if count_of_printed > 9:
+            break
+
+    fi = open('lists_' + filename_tag + '.json', 'w')
+    lists_dict = dict()
+    lists_dict['top50'] = top50
+    lists_dict['bottom10'] = bottom10
+    lists_dict['variable10'] = variable10
+    lists_dict['most10'] = most10
+    json.dump(lists_dict, fi)
 
     print 'Finished'
 
