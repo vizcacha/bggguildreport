@@ -6,28 +6,24 @@
 # TODO: Refactor user retries
 # TODO: Implement pastable report
 # TODO: Remove dependency on boardgamegeek module to make better queries
-#
-# Steven Canning
-# January 2016
 
-from boardgamegeek import BoardGameGeek
-from boardgamegeek.exceptions import BoardGameGeekAPIRetryError
+from boardgamegeek import BGGClient
 
+from Queue import Queue
 import json
 import csv
 import math
 import datetime
 
 HEAVY_CARDBOARD = 2044
+PUNCHING_CARDBOARD = 1805
 
 # Dictionary Keys
 SORTED_GAMES = 'sorted_games'
 SUMMARY = 'summary'
 TOTAL_GAMES = 'total_games_rated'
 GUILD_MEMBER_COUNT = 'guild_members'
-FAILED_RETRIEVALS = 'failed_retrievals'
 MEMBERS = 'members'
-FAILED_USERS = 'failed_users'
 TIME = 'time_at_generation'
 
 ### UTILITY FUNCTIONS ###
@@ -47,15 +43,16 @@ def stdev(numbers):
 def get_guild_user_list(guild_id, bgg=None):
     """Fetch the member list for a BGG Guild"""
     if bgg is None:
-        bgg = BoardGameGeek()
+        bgg = BGGClient()
 
+    print 'Fetching guild user list'
     guild = bgg.guild(guild_id)
-    return guild.members
+    return list(guild.members)
 
 def get_user_ratings(username, bgg=None):
     """Returns a dict: gameid -> rating"""
     if bgg is None:
-        bgg = BoardGameGeek()
+        bgg = BGGClient()
 
     collection = bgg.collection(username)
 
@@ -69,12 +66,17 @@ def get_user_ratings(username, bgg=None):
 def get_game_info(game_id, bgg=None):
     """Fetch the BGG info for game having game_id"""
     if bgg is None:
-        bgg = BoardGameGeek()
+        bgg = BGGClient()
 
-    try:
-        game = bgg.game(game_id=game_id)
-    except BoardGameGeekAPIRetryError:
-        game = None
+    print 'Fetching info for game', str(game_id)
+
+    game = None
+    while game is None:
+        try:
+            game = bgg.game(game_id=game_id)
+        except Exception:
+            print 'Trying to fetch again...'
+            continue
 
     return game
 
@@ -100,52 +102,32 @@ def get_all_ratings(members, bgg=None):
         Returns: A dict (gameid, game name) -> list of ratings
     """
     if bgg is None:
-        bgg = BoardGameGeek()
+        bgg = BGGClient()
 
     guild_ratings = dict()
-    try_again = list()
-    third_try = list()
-    failed_users = list()
+
     print 'Retrieving user ratings...'
+    work_queue = Queue()
     for member in members:
+        work_queue.put(member)
+
+    while not work_queue.empty():
+        print work_queue.qsize(), 'members to process'
+        member = work_queue.get()
+        print 'Fetching data for ', member
         try:
             user_ratings = get_user_ratings(member, bgg=bgg)
-        except BoardGameGeekAPIRetryError:
-            try_again.append(member)
+        except Exception:
+            work_queue.put(member)
             continue
         add_individual_to_group_ratings(guild_ratings, user_ratings)
 
-    if try_again:
-        print 'Failed to pull info for %d users. Retrying...' % len(try_again)
-        for member in try_again:
-            try:
-                user_ratings = get_user_ratings(member, bgg=bgg)
-            except BoardGameGeekAPIRetryError:
-                third_try.append(member)
-                continue
-            add_individual_to_group_ratings(guild_ratings, user_ratings)
+    print 'Ratings retrieved for all users.'
 
-        if third_try:
-            print 'Still failed to pull info for %d users. Final retry...' % len(third_try)
-            for member in third_try:
-                try:
-                    user_ratings = get_user_ratings(member, bgg=bgg)
-                except BoardGameGeekAPIRetryError:
-                    failed_users.append(member)
-                    continue
-                add_individual_to_group_ratings(guild_ratings, user_ratings)
-
-    if failed_users:
-        print 'Failed to retrieve data for %d users' % len(failed_users)
-        for user in failed_users:
-            print user
-    else:
-        print 'Ratings retrieved for all users.'
-
-    return guild_ratings, failed_users
+    return guild_ratings
 
 def main(users=None, raw_data=None, generate_report=False, prune=None):
-    bgg = BoardGameGeek()
+    bgg = BGGClient()
 
     # if not users and not raw_data: get users, get user ratings, process ratings
     # if users and not raw_data: load users, get user ratings, process ratings
@@ -157,7 +139,7 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
     if raw_data is None:
         # load members from file or query for current list
         if users is None:
-            members = get_guild_user_list(HEAVY_CARDBOARD, bgg=bgg)
+            members = get_guild_user_list(PUNCHING_CARDBOARD, bgg=bgg)
             of = open('members_' + filename_tag + '.txt', 'w')
             for member in members:
                 of.write(member + '\n')
@@ -166,7 +148,7 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
 
         guild_size = len(members)
         print 'Members list loaded: %d guild members' % guild_size
-        guild_ratings, failed_users = get_all_ratings(members, bgg=bgg)
+        guild_ratings = get_all_ratings(members, bgg=bgg)
 
         print 'Processing results...'
         print '%d games rated' % len(guild_ratings)
@@ -184,12 +166,10 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
         current_time_str = str(datetime.datetime.now())
         rating_data = dict()
         rating_data[SUMMARY] = { GUILD_MEMBER_COUNT: guild_size,
-                              FAILED_RETRIEVALS: len(failed_users),
                               TOTAL_GAMES: len(guild_ratings),
                               TIME: current_time_str
                             }
         rating_data[MEMBERS] = members
-        rating_data[FAILED_USERS] = failed_users
         rating_data[SORTED_GAMES] = top_games
         with open('member_data_' + filename_tag + '.json', 'w') as raw_data_file:
             json.dump(rating_data, raw_data_file)
