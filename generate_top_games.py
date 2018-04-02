@@ -14,6 +14,7 @@ import json
 import csv
 import math
 import datetime
+import yaml
 
 HEAVY_CARDBOARD = 2044
 PUNCHING_CARDBOARD = 1805
@@ -104,7 +105,7 @@ def get_all_ratings(members, bgg=None):
     if bgg is None:
         bgg = BGGClient()
 
-    guild_ratings = dict()
+    all_member_ratings = dict()
 
     print 'Retrieving user ratings...'
     work_queue = Queue()
@@ -120,10 +121,16 @@ def get_all_ratings(members, bgg=None):
         except Exception:
             work_queue.put(member)
             continue
-        add_individual_to_group_ratings(guild_ratings, user_ratings)
+        all_member_ratings[member] = user_ratings
 
     print 'Ratings retrieved for all users.'
 
+    return all_member_ratings
+
+def collapse_ratings(member_ratings):
+    guild_ratings = dict()
+    for _, ratings in member_ratings.iteritems():
+        add_individual_to_group_ratings(guild_ratings, ratings)
     return guild_ratings
 
 def main(users=None, raw_data=None, generate_report=False, prune=None):
@@ -148,7 +155,8 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
 
         guild_size = len(members)
         print 'Members list loaded: %d guild members' % guild_size
-        guild_ratings = get_all_ratings(members, bgg=bgg)
+        member_ratings = get_all_ratings(members, bgg=bgg)
+        guild_ratings = collapse_ratings(member_ratings)
 
         print 'Processing results...'
         print '%d games rated' % len(guild_ratings)
@@ -171,8 +179,10 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
                             }
         rating_data[MEMBERS] = members
         rating_data[SORTED_GAMES] = top_games
-        with open('member_data_' + filename_tag + '.json', 'w') as raw_data_file:
+        with open('guild_data_' + filename_tag + '.json', 'w') as raw_data_file:
             json.dump(rating_data, raw_data_file)
+        with open('member_data_' + filename_tag + '.yml', 'w') as raw_data_file:
+            yaml.dump(member_ratings, raw_data_file)
 
     elif raw_data is not None:
         rating_data = json.load(open(raw_data, 'r'))
