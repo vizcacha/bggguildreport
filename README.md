@@ -1,4 +1,4 @@
-# heavycardboardmonthly
-Scripts for generating monthly lists for the Heavy Cardboard guild on BoardGameGeek
+# bggguildreport
+Scripts for generating monthly lists for guilds on BoardGameGeek
 
-This script is still very rough around the edges. Because so many calls to BGG are necessary it dumps intermediate steps to a file.
+This script is still very rough. Because so many calls to BGG are necessary and can fail it dumps intermediate steps to a file.
