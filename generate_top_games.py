@@ -209,9 +209,18 @@ def main(users=None, raw_data=None, generate_report=False, prune=None):
                     return
                 pruned_games.append(matched_game)
         pruned_games.sort(key=lambda x: x[3], reverse=True)
+        
+        max_name_width = max([len(game[0]) for game in pruned_games])
+        format_string_prefix = u'{:2} {:'
+        format_string_suffix = u'} {:3} {:5.3f} {:5.3f}'
+        format_string = format_string_prefix + str(max_name_width) + format_string_suffix
         for idx, game in enumerate(pruned_games):
-            label = str(idx + 1) + '.'
-            print label, game[0], game[2], game[3], game[4]
+            detail_string = format_string.format(idx + 1,
+                    game[0],
+                    game[2],
+                    game[3],
+                    game[4])
+            print detail_string
         return
     else:
         top_games = filter(lambda x: x[1] >= 0.1 * member_count, top_games)
